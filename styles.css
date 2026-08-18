@@ -173,3 +173,47 @@ h1,h2,h3,p { margin-top:0; }
   .chat-input { display:grid; grid-template-columns:minmax(0, 1fr) 38px; }
   .chat-input input { width:100%; }
 }
+
+/* Music-scene illustrations for the six resource entrances. */
+.service-card::before {
+  content:"";
+  position:absolute;
+  width:156px;
+  height:156px;
+  right:-42px;
+  top:-48px;
+  border-radius:50%;
+  opacity:.82;
+  transform:rotate(-14deg);
+  transition:transform .35s ease, opacity .35s ease;
+}
+.service-card::after {
+  content:"";
+  position:absolute;
+  right:18px;
+  top:22px;
+  width:94px;
+  height:74px;
+  opacity:.55;
+  pointer-events:none;
+}
+.service-card:hover::before { transform:rotate(0deg) scale(1.08); opacity:1; }
+.service-card:nth-child(1)::before { background:radial-gradient(circle at 50% 50%,rgba(100,227,232,.3) 0 7%,transparent 8% 23%,rgba(100,227,232,.18) 24% 26%,transparent 27% 43%,rgba(100,227,232,.11) 44% 46%,transparent 47%); }
+.service-card:nth-child(1)::after { background:linear-gradient(90deg,transparent 0 12%,var(--cyan) 13% 15%,transparent 16% 35%,var(--cyan) 36% 39%,transparent 40% 59%,var(--cyan) 60% 63%,transparent 64%); clip-path:polygon(0 58%,12% 58%,12% 23%,19% 23%,19% 74%,29% 74%,29% 44%,36% 44%,36% 82%,49% 82%,49% 17%,56% 17%,56% 63%,69% 63%,69% 35%,76% 35%,76% 72%,100% 72%,100% 78%,0 78%); }
+.service-card:nth-child(2)::before { border-radius:12px; background:repeating-linear-gradient(90deg,rgba(145,115,255,.22) 0 6px,transparent 6px 18px); box-shadow:inset 0 0 0 1px rgba(145,115,255,.3), inset 0 0 0 9px rgba(145,115,255,.06); }
+.service-card:nth-child(2)::after { background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(197,186,255,.8) 10px 12px,transparent 13px 21px); transform:skewY(-18deg); }
+.service-card:nth-child(3)::before { background:radial-gradient(circle,transparent 0 17%,rgba(100,227,232,.2) 18% 20%,transparent 21% 36%,rgba(100,227,232,.14) 37% 39%,transparent 40% 56%,rgba(100,227,232,.1) 57% 59%,transparent 60%); }
+.service-card:nth-child(3)::after { border:1px solid rgba(100,227,232,.46); border-left-color:transparent; border-radius:50%; transform:rotate(35deg); box-shadow:18px 0 0 -1px rgba(100,227,232,.3),36px 0 0 -1px rgba(100,227,232,.18); }
+.service-card:nth-child(4)::before { border-radius:16px; background:linear-gradient(135deg,rgba(196,255,116,.2),transparent 62%),repeating-linear-gradient(90deg,rgba(196,255,116,.18) 0 2px,transparent 2px 10px); box-shadow:inset 0 0 0 1px rgba(196,255,116,.25); }
+.service-card:nth-child(4)::after { background:repeating-linear-gradient(90deg,rgba(196,255,116,.8) 0 3px,transparent 3px 8px); clip-path:polygon(0 58%,8% 58%,8% 25%,16% 25%,16% 58%,24% 58%,24% 10%,32% 10%,32% 58%,40% 58%,40% 35%,48% 35%,48% 58%,56% 58%,56% 18%,64% 18%,64% 58%,72% 58%,72% 5%,80% 5%,80% 58%,100% 58%,100% 64%,0 64%); }
+.service-card:nth-child(5)::before { background:radial-gradient(circle at 50% 50%,#252b42 0 17%,#0c101d 18% 31%,#2e3750 32% 35%,#0c101d 36% 55%,rgba(145,115,255,.18) 56% 59%,transparent 60%); box-shadow:0 16px 32px rgba(0,0,0,.35); }
+.service-card:nth-child(5)::after { border:1px solid rgba(145,115,255,.42); border-radius:50%; transform:scale(.62) rotate(20deg); }
+.service-card:nth-child(6)::before { background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.28) 0 5%,transparent 6% 21%,rgba(100,227,232,.24) 22% 25%,transparent 26% 48%,rgba(145,115,255,.18) 49% 52%,transparent 53%); }
+.service-card:nth-child(6)::after { background:linear-gradient(135deg,transparent 44%,rgba(100,227,232,.65) 45% 47%,transparent 48% 54%,rgba(145,115,255,.55) 55% 57%,transparent 58%); }
+.service-card .service-icon { position:relative; z-index:1; width:58px; height:58px; box-shadow:0 10px 24px rgba(0,0,0,.2); }
+.service-card .service-icon i { width:26px; height:26px; }
+.service-card h3, .service-card p, .service-card .card-arrow { position:relative; z-index:1; }
+.genre-content::before { display:block; margin-bottom:12px; color:rgba(255,255,255,.8); font-size:25px; line-height:1; }
+.genre-card.pop .genre-content::before { content:"◉  ∿  ♪"; color:var(--cyan); letter-spacing:7px; }
+.genre-card.rap .genre-content::before { content:"▮▮▮  /  BASS"; color:#f2a9ff; font:11px "DM Mono",monospace; letter-spacing:2px; }
+.genre-card.classic .genre-content::before { content:"♬  ◇  ♬"; color:#f5cb7b; letter-spacing:8px; }
