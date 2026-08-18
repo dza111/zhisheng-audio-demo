@@ -368,6 +368,35 @@ async function streamDeepSeekReply(messages, bubble) {
   return answer;
 }
 
+function enhanceHome() {
+  const currentPath = location.pathname.replace(/\/$/, '') || '/';
+  if (currentPath !== '/' || document.querySelector('.genre-stage')) return;
+  const anchor = document.querySelector('.trust-row');
+  if (!anchor) return;
+  anchor.insertAdjacentHTML('afterend', `
+    <section class="shell genre-stage">
+      <div class="genre-intro">
+        <div><div class="eyebrow">SOUND AESTHETIC</div><h2>每一种风格，都有自己的声场</h2></div>
+        <p>从流行旋律的明亮质感，到说唱律动的低频张力，再到古典配器的层次呼吸，为不同创作意图匹配适合的专业资源。</p>
+      </div>
+      <div class="genre-grid">
+        <a class="genre-card pop" href="/arrangement"><div class="genre-content"><span class="genre-index">01 / POP</span><h3>流行音乐</h3><p>旋律、情绪与制作感的平衡，让作品拥有可被记住的第一耳感受。</p></div><span class="card-arrow">${icon('arrow-up-right')}</span></a>
+        <a class="genre-card rap" href="/mixing"><div class="genre-content"><span class="genre-index">02 / HIP-HOP</span><h3>说唱音乐</h3><p>强劲的人声表达、清晰咬字与扎实低频，建立作品的态度。</p></div><span class="card-arrow">${icon('arrow-up-right')}</span></a>
+        <a class="genre-card classic" href="/arrangement"><div class="genre-content"><span class="genre-index">03 / CLASSICAL</span><h3>古典与影视</h3><p>用动态、空间和配器，为叙事建立更深的声音纵深。</p></div><span class="card-arrow">${icon('arrow-up-right')}</span></a>
+      </div>
+    </section>`);
+  lucide.createIcons();
+}
+
+function navigate(url) {
+  history.pushState({}, '', url);
+  app();
+  enhanceHome();
+}
+
+window.addEventListener('popstate', () => setTimeout(enhanceHome, 0));
+enhanceHome();
+
 // Final binding: keep prior conversations in local storage and restore them on demand.
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach(anchor => anchor.addEventListener('click', event => {
@@ -433,6 +462,7 @@ function bindEvents() {
 }
 
 app();
+enhanceHome();
 
 // DeepSeek may use CRLF between SSE events; accept either CRLF or LF boundaries.
 async function streamDeepSeekReply(messages, bubble) {
