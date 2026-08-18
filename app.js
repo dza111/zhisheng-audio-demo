@@ -131,6 +131,144 @@ async function streamDeepSeekReply(messages, bubble) {
   return answer;
 }
 
+const CHAT_SESSIONS_KEY = 'zhisheng-chat-sessions-v1';
+let activeChatId = null;
+
+function readChatSessions() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CHAT_SESSIONS_KEY) || '[]');
+    return Array.isArray(stored) ? stored : [];
+  } catch { return []; }
+}
+
+function writeChatSessions(sessions) {
+  localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(sessions.slice(0, 30)));
+}
+
+function saveCurrentChat() {
+  const messages = chatHistory.filter(item => item.role === 'user' || item.role === 'assistant');
+  if (!messages.some(item => item.role === 'user')) return;
+  const sessions = readChatSessions();
+  const firstUser = messages.find(item => item.role === 'user');
+  const now = new Date().toISOString();
+  if (!activeChatId) {
+    activeChatId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    sessions.unshift({ id: activeChatId, title: firstUser.content.slice(0, 24), messages, updatedAt: now });
+  } else {
+    const current = sessions.find(item => item.id === activeChatId);
+    if (current) {
+      current.messages = messages;
+      current.updatedAt = now;
+      current.title = current.title || firstUser.content.slice(0, 24);
+    } else {
+      sessions.unshift({ id: activeChatId, title: firstUser.content.slice(0, 24), messages, updatedAt: now });
+    }
+  }
+  writeChatSessions(sessions);
+  renderChatSessions();
+}
+
+function renderChatMessages() {
+  const box = document.querySelector('#messages');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!chatHistory.length) {
+    box.innerHTML = `<div class="message"><div class="message-avatar">${icon('sparkles')}</div><div class="bubble">你好，我是智声 AI。告诉我你想制作什么，或描述你的预算、风格和设备需求。</div></div>`;
+    lucide.createIcons();
+    return;
+  }
+  chatHistory.forEach(item => appendStreamMessage(item.role === 'user' ? 'user' : 'assistant', item.content));
+}
+
+function renderChatSessions() {
+  const side = document.querySelector('.chat-side');
+  if (!side) return;
+  const oldThread = side.querySelector('.thread');
+  if (oldThread) oldThread.remove();
+  let list = side.querySelector('.thread-list');
+  if (!list) {
+    list = document.createElement('div');
+    list.className = 'thread-list';
+    const label = side.querySelector('.side-label');
+    if (label) label.after(list);
+  }
+  const sessions = readChatSessions();
+  list.innerHTML = sessions.length ? sessions.map(session => `<button class="thread-item ${session.id === activeChatId ? 'active' : ''}" data-session-id="${session.id}">${escapeChatText(session.title)}</button>`).join('') : '<div class="thread-empty">暂无历史对话</div>';
+  list.querySelectorAll('[data-session-id]').forEach(button => button.addEventListener('click', () => {
+    const session = readChatSessions().find(item => item.id === button.dataset.sessionId);
+    if (!session) return;
+    activeChatId = session.id;
+    chatHistory.length = 0;
+    chatHistory.push(...session.messages);
+    renderChatMessages();
+    renderChatSessions();
+  }));
+}
+
+// Final event binding adds persistent local conversation history to the streaming chat.
+function bindEvents() {
+  document.querySelectorAll('[data-route]').forEach(anchor => anchor.addEventListener('click', event => {
+    event.preventDefault();
+    navigate(anchor.getAttribute('href'));
+  }));
+  document.querySelectorAll('[data-play]').forEach(button => button.addEventListener('click', () => {
+    const track = button.closest('.track');
+    const playing = track.classList.toggle('playing');
+    button.innerHTML = icon(playing ? 'pause' : 'play');
+    lucide.createIcons();
+  }));
+  document.querySelectorAll('[data-contact]').forEach(button => button.addEventListener('click', () => navigate('/ai-agent')));
+  document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
+    button.parentElement.querySelectorAll('.filter').forEach(item => item.classList.remove('active'));
+    button.classList.add('active');
+  }));
+  document.querySelectorAll('[data-suggest]').forEach(button => button.addEventListener('click', () => {
+    const input = document.querySelector('#chatInput');
+    if (input) { input.value = button.dataset.suggest; input.focus(); }
+  }));
+  if (!document.querySelector('#chatForm')) return;
+  renderChatSessions();
+  renderChatMessages();
+  const newChat = document.querySelector('#newChat');
+  if (newChat) newChat.addEventListener('click', () => {
+    saveCurrentChat();
+    activeChatId = null;
+    chatHistory.length = 0;
+    renderChatMessages();
+    renderChatSessions();
+    document.querySelector('#chatInput')?.focus();
+  });
+  const form = document.querySelector('#chatForm');
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = document.querySelector('#chatInput');
+    const submit = form.querySelector('button[type="submit"]');
+    const query = input?.value.trim();
+    if (!query || !submit) return;
+    input.value = '';
+    input.disabled = true;
+    submit.disabled = true;
+    appendStreamMessage('user', query);
+    chatHistory.push({ role: 'user', content: query });
+    saveCurrentChat();
+    const bubble = appendStreamMessage('assistant');
+    try {
+      const answer = await streamDeepSeekReply(chatHistory, bubble);
+      chatHistory.push({ role: 'assistant', content: answer || '抱歉，我暂时没有生成内容。' });
+      if (!answer) bubble.textContent = '抱歉，我暂时没有生成内容。';
+      saveCurrentChat();
+    } catch (error) {
+      bubble.textContent = `连接 AI 失败：${error.message}`;
+      chatHistory.pop();
+      saveCurrentChat();
+    } finally {
+      input.disabled = false;
+      submit.disabled = false;
+      input.focus();
+    }
+  });
+}
+
 // This declaration intentionally replaces the demo-only fake reply handler above.
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach(anchor => anchor.addEventListener('click', event => {
