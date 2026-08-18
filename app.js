@@ -433,3 +433,45 @@ function bindEvents() {
 }
 
 app();
+
+// DeepSeek may use CRLF between SSE events; accept either CRLF or LF boundaries.
+async function streamDeepSeekReply(messages, bubble) {
+  const response = await fetch(CHAT_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+    body: JSON.stringify({ model: 'deepseek-chat', messages })
+  });
+  if (!response.ok) {
+    let message = `请求失败（${response.status}）`;
+    try { message = (await response.json()).error || message; } catch {}
+    throw new Error(message);
+  }
+  if (!response.body) throw new Error('浏览器不支持流式响应');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let answer = '';
+  let finished = false;
+  while (!finished) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const events = pending.split(/\r?\n\r?\n/);
+    pending = events.pop() || '';
+    for (const event of events) {
+      if (/data:\s*\[DONE\]/.test(event)) { finished = true; break; }
+      const piece = parseDeepSeekEvent(event);
+      if (piece) {
+        answer += piece;
+        bubble.textContent = answer;
+      }
+    }
+    if (done) break;
+  }
+  if (!finished && pending) {
+    const piece = parseDeepSeekEvent(pending);
+    answer += piece;
+    bubble.textContent = answer;
+  }
+  try { await reader.cancel(); } catch {}
+  return answer;
+}
