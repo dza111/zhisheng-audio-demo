@@ -140,3 +140,9 @@ h1,h2,h3,p { margin-top:0; }
   .chat-shell { width:calc(100% - 28px); }
   .bubble { max-width:calc(100% - 62px); }
 }
+
+.thread-list { display:grid; gap:6px; margin-top:8px; }
+.thread-item { width:100%; padding:10px; overflow:hidden; color:#c9d3e5; background:rgba(255,255,255,.025); border:1px solid transparent; text-align:left; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:13px; }
+.thread-item:hover { border-color:rgba(100,227,232,.3); background:rgba(100,227,232,.05); }
+.thread-item.active { color:#e7f8ff; border-color:rgba(100,227,232,.3); border-left:2px solid var(--cyan); background:rgba(100,227,232,.07); }
+.thread-empty { padding:10px; color:#68738a; font-size:12px; }
