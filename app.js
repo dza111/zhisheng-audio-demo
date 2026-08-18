@@ -51,3 +51,139 @@ function aiReply(query){ const q=query.toLowerCase(); if(/说唱|hip|rap|混音/
 function addMessage(role,content){ const box=document.querySelector('#messages'); if(!box)return; const avatar=role==='user'?'U':icon('sparkles'); box.insertAdjacentHTML('beforeend',`<div class="message ${role}">${role==='user'?'':`<div class="message-avatar">${avatar}</div>`}<div class="bubble">${content}</div></div>`); lucide.createIcons(); box.parentElement.scrollTop=box.scrollHeight; }
 function bindEvents(){ document.querySelectorAll('[data-route]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();navigate(a.getAttribute('href'));})); document.querySelectorAll('[data-play]').forEach(btn=>btn.addEventListener('click',()=>{ const track=btn.closest('.track'); const playing=track.classList.toggle('playing'); btn.innerHTML=icon(playing?'pause':'play'); lucide.createIcons(); })); document.querySelectorAll('[data-contact]').forEach(btn=>btn.addEventListener('click',()=>navigate('/ai-agent'))); document.querySelectorAll('.filter').forEach(btn=>btn.addEventListener('click',()=>{btn.parentElement.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));btn.classList.add('active')})); const consult=document.querySelector('#consultButton'); if(consult)consult.addEventListener('click',()=>{const input=document.querySelector('#consultInput');const result=document.querySelector('#consultResult');result.textContent=input.value?`建议先从「人声麦克风 + 声卡 + 监听耳机」的组合开始。根据“${input.value}”，AI 将优先筛选预算友好、易于上手且适合直播场景的设备。`:'请告诉我你的预算、使用场景或已有设备。';result.classList.add('show');}); const form=document.querySelector('#chatForm'); if(form)form.addEventListener('submit',e=>{e.preventDefault();const input=document.querySelector('#chatInput');const q=input.value.trim();if(!q)return;addMessage('user',q);input.value='';setTimeout(()=>{const r=aiReply(q);let c=`${r.text}`;if(r.person)c+=`<div class="recommend"><div class="rec-top"><img class="rec-photo" src="${r.person.image}" alt="${r.person.name}"/><div><strong>${r.person.name}</strong><span>${r.person.role}</span></div></div><div class="rec-meta"><span>${r.person.price}</span><span>${r.person.styles.join(' / ')}</span></div>${link(`/${r.kind}/${r.person.id}`,`查看详情 ${icon('arrow-up-right')}`,'text-link')}</div>`;addMessage('ai',c);},420);}); document.querySelectorAll('[data-suggest]').forEach(btn=>btn.addEventListener('click',()=>{const input=document.querySelector('#chatInput');input.value=btn.dataset.suggest;input.focus();})); const newChat=document.querySelector('#newChat'); if(newChat)newChat.addEventListener('click',()=>{document.querySelector('#messages').innerHTML=`<div class="message"><div class="message-avatar">${icon('sparkles')}</div><div class="bubble">新的对话已开始。请告诉我你的音频需求。</div></div>`;lucide.createIcons();}); }
 window.addEventListener('popstate',app); app();
+
+// DeepSeek streaming chat: the browser only talks to our own /api/chat proxy.
+const CHAT_API_URL = window.CHAT_API_URL || '/api/chat';
+const chatHistory = [];
+
+function escapeChatText(value) {
+  return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+}
+
+function appendStreamMessage(role, text = '') {
+  const box = document.querySelector('#messages');
+  if (!box) return null;
+  const isUser = role === 'user';
+  const message = document.createElement('div');
+  message.className = `message ${isUser ? 'user' : 'ai'}`;
+  if (!isUser) {
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.innerHTML = icon('sparkles');
+    message.appendChild(avatar);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  message.appendChild(bubble);
+  box.appendChild(message);
+  if (!isUser) lucide.createIcons();
+  message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return bubble;
+}
+
+function parseDeepSeekEvent(raw) {
+  const data = raw.replace(/^data:\s*/, '').trim();
+  if (!data || data === '[DONE]') return '';
+  try {
+    const payload = JSON.parse(data);
+    return payload.choices?.[0]?.delta?.content || '';
+  } catch {
+    return '';
+  }
+}
+
+async function streamDeepSeekReply(messages, bubble) {
+  const response = await fetch(CHAT_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+    body: JSON.stringify({ model: 'deepseek-chat', messages })
+  });
+  if (!response.ok) {
+    let message = `请求失败（${response.status}）`;
+    try { message = (await response.json()).error || message; } catch {}
+    throw new Error(message);
+  }
+  if (!response.body) throw new Error('浏览器不支持流式响应');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let answer = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const events = pending.split(/\n\n/);
+    pending = events.pop() || '';
+    for (const event of events) {
+      const piece = parseDeepSeekEvent(event);
+      if (piece) {
+        answer += piece;
+        bubble.textContent = answer;
+      }
+    }
+    if (done) break;
+  }
+  if (pending) {
+    const piece = parseDeepSeekEvent(pending);
+    answer += piece;
+    bubble.textContent = answer;
+  }
+  return answer;
+}
+
+// This declaration intentionally replaces the demo-only fake reply handler above.
+function bindEvents() {
+  document.querySelectorAll('[data-route]').forEach(anchor => anchor.addEventListener('click', event => {
+    event.preventDefault();
+    navigate(anchor.getAttribute('href'));
+  }));
+  document.querySelectorAll('[data-play]').forEach(button => button.addEventListener('click', () => {
+    const track = button.closest('.track');
+    const playing = track.classList.toggle('playing');
+    button.innerHTML = icon(playing ? 'pause' : 'play');
+    lucide.createIcons();
+  }));
+  document.querySelectorAll('[data-contact]').forEach(button => button.addEventListener('click', () => navigate('/ai-agent')));
+  document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
+    button.parentElement.querySelectorAll('.filter').forEach(item => item.classList.remove('active'));
+    button.classList.add('active');
+  }));
+  document.querySelectorAll('[data-suggest]').forEach(button => button.addEventListener('click', () => {
+    const input = document.querySelector('#chatInput');
+    if (input) { input.value = button.dataset.suggest; input.focus(); }
+  }));
+  const newChat = document.querySelector('#newChat');
+  if (newChat) newChat.addEventListener('click', () => {
+    chatHistory.length = 0;
+    const messages = document.querySelector('#messages');
+    if (messages) messages.innerHTML = `<div class="message"><div class="message-avatar">${icon('sparkles')}</div><div class="bubble">新的对话已开始。请告诉我你的音频需求。</div></div>`;
+    lucide.createIcons();
+  });
+  const form = document.querySelector('#chatForm');
+  if (!form) return;
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = document.querySelector('#chatInput');
+    const submit = form.querySelector('button[type="submit"]');
+    const query = input?.value.trim();
+    if (!query || !submit) return;
+    input.value = '';
+    input.disabled = true;
+    submit.disabled = true;
+    appendStreamMessage('user', query);
+    chatHistory.push({ role: 'user', content: query });
+    const bubble = appendStreamMessage('assistant');
+    try {
+      const answer = await streamDeepSeekReply(chatHistory, bubble);
+      chatHistory.push({ role: 'assistant', content: answer || '抱歉，我暂时没有生成内容。' });
+      if (!answer) bubble.textContent = '抱歉，我暂时没有生成内容。';
+    } catch (error) {
+      bubble.textContent = `连接 AI 失败：${error.message}`;
+      chatHistory.pop();
+    } finally {
+      input.disabled = false;
+      submit.disabled = false;
+      input.focus();
+    }
+  });
+}
