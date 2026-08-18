@@ -100,9 +100,13 @@ class SpaHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.end_headers()
         try:
+            tail = b""
             while chunk := upstream.read(4096):
                 self.wfile.write(chunk)
                 self.wfile.flush()
+                tail = (tail + chunk)[-128:]
+                if b"data: [DONE]" in tail:
+                    break
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
