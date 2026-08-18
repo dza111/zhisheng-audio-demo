@@ -106,6 +106,7 @@ class SpaHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(line)
                 self.wfile.flush()
                 if line.strip() == b"data: [DONE]":
+                    self.close_connection = True
                     break
         except (BrokenPipeError, ConnectionResetError):
             pass
