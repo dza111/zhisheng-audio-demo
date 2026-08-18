@@ -269,8 +269,6 @@ function bindEvents() {
   });
 }
 
-app();
-
 // This declaration intentionally replaces the demo-only fake reply handler above.
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach(anchor => anchor.addEventListener('click', event => {
@@ -369,3 +367,69 @@ async function streamDeepSeekReply(messages, bubble) {
   try { await reader.cancel(); } catch {}
   return answer;
 }
+
+// Final binding: keep prior conversations in local storage and restore them on demand.
+function bindEvents() {
+  document.querySelectorAll('[data-route]').forEach(anchor => anchor.addEventListener('click', event => {
+    event.preventDefault();
+    navigate(anchor.getAttribute('href'));
+  }));
+  document.querySelectorAll('[data-play]').forEach(button => button.addEventListener('click', () => {
+    const track = button.closest('.track');
+    const playing = track.classList.toggle('playing');
+    button.innerHTML = icon(playing ? 'pause' : 'play');
+    lucide.createIcons();
+  }));
+  document.querySelectorAll('[data-contact]').forEach(button => button.addEventListener('click', () => navigate('/ai-agent')));
+  document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
+    button.parentElement.querySelectorAll('.filter').forEach(item => item.classList.remove('active'));
+    button.classList.add('active');
+  }));
+  document.querySelectorAll('[data-suggest]').forEach(button => button.addEventListener('click', () => {
+    const input = document.querySelector('#chatInput');
+    if (input) { input.value = button.dataset.suggest; input.focus(); }
+  }));
+  const form = document.querySelector('#chatForm');
+  if (!form) return;
+  renderChatSessions();
+  renderChatMessages();
+  const newChat = document.querySelector('#newChat');
+  if (newChat) newChat.addEventListener('click', () => {
+    saveCurrentChat();
+    activeChatId = null;
+    chatHistory.length = 0;
+    renderChatMessages();
+    renderChatSessions();
+    document.querySelector('#chatInput')?.focus();
+  });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = document.querySelector('#chatInput');
+    const submit = form.querySelector('button[type="submit"]');
+    const query = input?.value.trim();
+    if (!query || !submit) return;
+    input.value = '';
+    input.disabled = true;
+    submit.disabled = true;
+    appendStreamMessage('user', query);
+    chatHistory.push({ role: 'user', content: query });
+    saveCurrentChat();
+    const bubble = appendStreamMessage('assistant');
+    try {
+      const answer = await streamDeepSeekReply(chatHistory, bubble);
+      chatHistory.push({ role: 'assistant', content: answer || '抱歉，我暂时没有生成内容。' });
+      if (!answer) bubble.textContent = '抱歉，我暂时没有生成内容。';
+      saveCurrentChat();
+    } catch (error) {
+      bubble.textContent = `连接 AI 失败：${error.message}`;
+      chatHistory.pop();
+      saveCurrentChat();
+    } finally {
+      input.disabled = false;
+      submit.disabled = false;
+      input.focus();
+    }
+  });
+}
+
+app();
