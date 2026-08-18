@@ -8,6 +8,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from mixing.api import handle as handle_mixing_request
+
 
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 RATE_WINDOW_SECONDS = int(os.environ.get("RATE_WINDOW_SECONDS", "60"))
@@ -96,6 +98,16 @@ class SpaHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        request_path = unquote(urlparse(self.path).path)
+        if request_path.startswith("/api/mixing/"):
+            if not self._origin_allowed():
+                self._json(403, {"error": "Origin is not allowed"})
+                return
+            if self._rate_limited():
+                self._json(429, {"error": "Too many requests. Please try again shortly."})
+                return
+            handle_mixing_request(self, "POST", request_path)
+            return
         if self.path != "/api/chat":
             self._json(404, {"error": "Not found"})
             return
@@ -182,6 +194,12 @@ class SpaHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         request_path = unquote(urlparse(self.path).path)
+        if request_path.startswith("/api/mixing/"):
+            if not self._origin_allowed():
+                self._json(403, {"error": "Origin is not allowed"})
+                return
+            handle_mixing_request(self, "GET", request_path)
+            return
         path_parts = [part for part in Path(request_path).parts if part not in {"/", "\\"}]
         if any(part.startswith(".") for part in path_parts) or request_path.endswith((".py", ".env", ".key", ".pem")):
             self._json(404, {"error": "Not found"})

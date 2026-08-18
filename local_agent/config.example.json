@@ -1,0 +1,10 @@
+{
+  "server_url": "https://your-cloudbase-domain.example",
+  "agent_id": "zhisheng-studio-one-01",
+  "work_dir": "C:\\ZhishengMixJobs",
+  "adapter": "manual",
+  "studio_one_template": "C:\\Path\\To\\ZHISHENG_DEFAULT_MIX.song",
+  "manual_timeout_seconds": 7200,
+  "manual_test_output": false,
+  "poll_seconds": 5
+}
