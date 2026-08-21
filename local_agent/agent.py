@@ -17,11 +17,31 @@ sys.path.insert(0, str(AGENT_DIR))
 from studio_one_adapter import get_adapter  # noqa: E402
 
 
+def load_dotenv(path: Path) -> dict[str, str]:
+    """Read simple KEY=VALUE entries without overriding process environment."""
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if key:
+            values[key] = value
+    return values
+
+
 def load_config() -> dict:
     config_path = Path(os.environ.get("MIX_AGENT_CONFIG", AGENT_DIR / "config.json"))
     config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
-    config["server_url"] = os.environ.get("MIX_SERVER_URL", config.get("server_url", "")).rstrip("/")
-    config["token"] = os.environ.get("MIX_AGENT_TOKEN", config.get("token", ""))
+    dotenv = load_dotenv(AGENT_DIR / ".env")
+    config["server_url"] = os.environ.get("MIX_SERVER_URL", dotenv.get("MIX_SERVER_URL", config.get("server_url", ""))).rstrip("/")
+    config["token"] = os.environ.get("MIX_AGENT_TOKEN", dotenv.get("MIX_AGENT_TOKEN", config.get("token", "")))
     config["agent_id"] = os.environ.get("MIX_AGENT_ID", config.get("agent_id", "zhisheng-local-agent"))
     config["work_dir"] = os.environ.get("MIX_WORK_DIR", config.get("work_dir", str(Path.home() / "ZhishengMixJobs")))
     if not config["server_url"] or not config["token"]:
@@ -53,17 +73,21 @@ class ApiClient:
             while chunk := response.read(64 * 1024):
                 output.write(chunk)
 
-    def upload_wav(self, path: str, audio_path: Path) -> tuple[int, bytes]:
+    def upload_audio(self, path: str, audio_path: Path, execution_mode: str = "studio_one") -> tuple[int, bytes]:
         boundary = f"----ZhishengAgent{uuid.uuid4().hex}"
         content = audio_path.read_bytes()
         name = audio_path.name.encode("utf-8")
         body = b"".join([
             f"--{boundary}\r\n".encode(),
             b'Content-Disposition: form-data; name="file"; filename="' + name + b'"\r\n',
-            b"Content-Type: audio/wav\r\n\r\n", content, b"\r\n",
+            (b"Content-Type: audio/mpeg\r\n\r\n" if audio_path.suffix.lower() == ".mp3" else b"Content-Type: audio/wav\r\n\r\n"), content, b"\r\n",
             f"--{boundary}--\r\n".encode(),
         ])
-        headers = {**self.headers, "Content-Type": f"multipart/form-data; boundary={boundary}"}
+        headers = {
+            **self.headers,
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "X-Mix-Execution-Mode": execution_mode,
+        }
         request = urllib.request.Request(self.base + path, data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=300) as response:
@@ -78,7 +102,12 @@ def process_job(client: ApiClient, adapter, config: dict, job: dict) -> None:
     input_dir = workspace / "inputs"
     input_dir.mkdir(parents=True, exist_ok=True)
 
+    current_step = "preparing"
+
     def report(status: str, message: str) -> None:
+        nonlocal current_step
+        current_step = status
+        print(f"[{job_id}] {status}: {message}", flush=True)
         client.request("POST", f"/api/mixing/agent/jobs/{job_id}/progress", {"status": status, "message": message})
 
     heartbeat_stop = threading.Event()
@@ -97,12 +126,17 @@ def process_job(client: ApiClient, adapter, config: dict, job: dict) -> None:
             client.download(item["download_path"], destination)
             item["local_path"] = str(destination)
         result = adapter.process(job, workspace, report)
-        report("uploading_result", "Local Agent 正在上传最终 WAV")
-        status, response = client.upload_wav(f"/api/mixing/agent/jobs/{job_id}/result", result.output_path)
+        report("uploading_result", "Local Agent 正在上传最终 MP3/WAV")
+        status, response = client.upload_audio(
+            f"/api/mixing/agent/jobs/{job_id}/result",
+            result.output_path,
+            result.execution_mode,
+        )
         if status not in {200, 201}:
             raise RuntimeError(response.decode("utf-8", errors="replace")[:500])
     except Exception as exc:
-        client.request("POST", f"/api/mixing/agent/jobs/{job_id}/fail", {"error": str(exc)})
+        print(f"[{job_id}] STUDIO_ONE_MIX_FAILED: {exc}", flush=True)
+        client.request("POST", f"/api/mixing/agent/jobs/{job_id}/fail", {"step": current_step, "error": str(exc)})
     finally:
         heartbeat_stop.set()
         heartbeat_thread.join(timeout=1)

@@ -94,6 +94,8 @@ def get_staged(file_id: str) -> dict | None:
 
 
 def create_job(upload_requests: list[dict], request: dict, plan: dict) -> dict:
+    if len(upload_requests) != 2:
+        raise ValueError("accompaniment and vocal are both required")
     if not upload_requests or len(upload_requests) > int(os.environ.get("MIX_MAX_FILES", "4")):
         raise ValueError("请上传 1 到 4 个音频文件")
     job_id = f"mix_{uuid.uuid4().hex}"
@@ -103,7 +105,7 @@ def create_job(upload_requests: list[dict], request: dict, plan: dict) -> dict:
         role = str(item.get("role", ""))
         file_id = str(item.get("file_id", ""))
         if role not in ALLOWED_ROLES or role in seen_roles:
-            raise ValueError("音频轨道类型无效或重复")
+            raise ValueError("当前 Studio One 模板仅支持主人声和伴奏，且每个轨道只能上传一个文件")
         staged = get_staged(file_id)
         if not staged or not Path(staged["path"]).is_file():
             raise ValueError("上传文件不存在或已过期")
@@ -119,6 +121,7 @@ def create_job(upload_requests: list[dict], request: dict, plan: dict) -> dict:
             "file_id": file_id,
             "role": role,
             "track_name": ROLE_TO_TRACK[role],
+            "channel_type": ROLE_TO_TRACK[role],
             "display_name": staged["display_name"],
             "format": staged["format"],
             "size_bytes": staged["size_bytes"],
@@ -127,6 +130,8 @@ def create_job(upload_requests: list[dict], request: dict, plan: dict) -> dict:
             "duration_seconds": staged.get("duration_seconds"),
             "path": str(destination),
         })
+    if seen_roles != ALLOWED_ROLES:
+        raise ValueError("accompaniment and vocal are both required")
     timestamp = now()
     job = {
         "job_id": job_id,
@@ -146,6 +151,7 @@ def create_job(upload_requests: list[dict], request: dict, plan: dict) -> dict:
         "progress": {"step": "queued", "message": "等待本地智能音频工作站领取任务"},
         "result": {"file_id": None, "display_name": None, "format": None, "path": None, "download_url": None, "duration_seconds": None, "execution_mode": os.environ.get("MIX_EXECUTION_MODE", "manual")},
         "error": None,
+        "failure_step": None,
     }
     with LOCK:
         JOBS[job_id] = job
@@ -205,7 +211,7 @@ def heartbeat(job_id: str, agent_id: str) -> dict:
         return job
 
 
-def save_result(job_id: str, filename: str, content: bytes, metadata: dict) -> dict:
+def save_result(job_id: str, filename: str, content: bytes, metadata: dict, execution_mode: str = "studio_one") -> dict:
     if not content:
         raise ValueError("导出结果为空")
     with LOCK:
@@ -215,17 +221,20 @@ def save_result(job_id: str, filename: str, content: bytes, metadata: dict) -> d
         result_id = f"result_{uuid.uuid4().hex}"
         folder = RESULTS_DIR / job_id
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{result_id}.wav"
+        extension = str(metadata.get("format") or Path(filename).suffix.lstrip(".") or "wav").lower()
+        if extension not in {"wav", "mp3"}:
+            raise ValueError("最终结果仅支持 WAV 或 MP3")
+        path = folder / f"{result_id}.{extension}"
         path.write_bytes(content)
         job["result"] = {
             "file_id": result_id,
-            "display_name": safe_display_name(filename) or "zhisheng_mix.wav",
-            "format": "wav",
+            "display_name": safe_display_name(filename) or f"zhisheng_mix.{extension}",
+            "format": extension,
             "path": str(path),
             "download_url": f"/api/mixing/jobs/{job_id}/result",
             "duration_seconds": metadata.get("duration_seconds"),
             "sample_rate": metadata.get("sample_rate"),
-            "execution_mode": os.environ.get("MIX_EXECUTION_MODE", "manual"),
+            "execution_mode": execution_mode,
         }
         job["status"] = "completed"
         job["progress"] = {"step": "completed", "message": "AI 混音完成，最终音频已上传"}

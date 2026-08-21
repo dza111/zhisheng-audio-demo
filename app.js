@@ -135,7 +135,10 @@ async function streamDeepSeekReply(messages, bubble) {
 // AI Mixing demo: a separate upload/job experience that does not touch /ai-agent.
 // -----------------------------------------------------------------------------
 const MIXING_JOB_KEY = 'zhisheng-active-mix-job-v1';
-const MIXING_API_BASE = (window.MIXING_API_BASE || 'https://zhisheng-ai-298879-11-1470821727.sh.run.tcloudbase.com').replace(/\/$/, '');
+const defaultMixingApiBase = ['localhost', '127.0.0.1'].includes(location.hostname)
+  ? location.origin
+  : 'https://zhisheng-ai-298879-11-1470821727.sh.run.tcloudbase.com';
+const MIXING_API_BASE = (window.MIXING_API_BASE || defaultMixingApiBase).replace(/\/$/, '');
 const mixingApiUrl = path => `${MIXING_API_BASE}/api/mixing${path}`;
 const mixingState = { files: {}, job: null, pollTimer: null };
 const mixingRoles = [

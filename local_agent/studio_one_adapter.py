@@ -32,6 +32,15 @@ class StudioOneAdapter(Protocol):
 
 def get_adapter(name: str, config: dict) -> StudioOneAdapter:
     if name == "manual":
-        from adapters.manual_adapter import ManualAdapter
+        try:
+            from .adapters.manual_adapter import ManualAdapter
+        except ImportError:
+            from adapters.manual_adapter import ManualAdapter
         return ManualAdapter(config)
+    if name in {"studio_one", "native_keys"}:
+        try:
+            from .adapters.studio_one_adapter import StudioOneAdapterImpl
+        except ImportError:
+            from adapters.studio_one_adapter import StudioOneAdapterImpl
+        return StudioOneAdapterImpl(config)
     raise ValueError(f"未支持的 Studio One Adapter：{name}")

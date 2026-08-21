@@ -120,7 +120,9 @@ def _agent_update(handler, job_id: str, action: str) -> None:
         elif action == "fail":
             payload = _json_body(handler)
             store.heartbeat(job_id, agent_id)
-            job = store.update_job(job_id, "failed", payload.get("error") or "Local Agent 执行失败", error=str(payload.get("error", ""))[:1000])
+            step = str(payload.get("step", ""))[:80] or "unknown"
+            error = str(payload.get("error", ""))[:1000] or "Local Agent 执行失败"
+            job = store.update_job(job_id, "failed", f"[{step}] {error}", error=error, failure_step=step)
         else:  # result
             maximum = int(os.environ.get("MIX_MAX_FILE_SIZE_MB", "100")) * 1024 * 1024 + 256 * 1024
             body = _read_body(handler, maximum)
@@ -131,12 +133,13 @@ def _agent_update(handler, job_id: str, action: str) -> None:
             temporary.write_bytes(content)
             try:
                 metadata = inspect_audio(temporary)
-                if metadata["format"] != "wav":
-                    raise UploadError("第一阶段仅接受 Local Agent 上传的最终 WAV")
+                if metadata["format"] not in {"wav", "mp3"}:
+                    raise UploadError("Local Agent 最终结果仅支持 WAV 或 MP3")
             finally:
                 temporary.unlink(missing_ok=True)
             store.heartbeat(job_id, agent_id)
-            job = store.save_result(job_id, file_part.get("filename", "zhisheng_mix.wav"), content, metadata)
+            execution_mode = handler.headers.get("X-Mix-Execution-Mode", "studio_one").strip()[:40] or "studio_one"
+            job = store.save_result(job_id, file_part.get("filename", "zhisheng_mix.wav"), content, metadata, execution_mode)
         handler._json(200, {"job": public_job(job)})
     except (KeyError, PermissionError) as exc:
         handler._json(404 if isinstance(exc, KeyError) else 403, {"error": str(exc)})
@@ -175,7 +178,9 @@ def handle(handler, method: str, request_path: str) -> bool:
                 if not result.get("file_id") or not path.is_file():
                     handler._json(404, {"error": "混音结果尚未生成"})
                 else:
-                    _send_file(handler, path, "audio/wav", result.get("display_name") or "zhisheng_mix.wav")
+                    content_type = "audio/mpeg" if result.get("format") == "mp3" else "audio/wav"
+                    fallback = "zhisheng_mix.mp3" if result.get("format") == "mp3" else "zhisheng_mix.wav"
+                    _send_file(handler, path, content_type, result.get("display_name") or fallback)
             else:
                 handler._json(404, {"error": "Not found"})
         elif method == "GET" and request_path == "/api/mixing/agent/jobs/next":
