@@ -135,12 +135,12 @@ async function streamDeepSeekReply(messages, bubble) {
 // AI Mixing demo: a separate upload/job experience that does not touch /ai-agent.
 // -----------------------------------------------------------------------------
 const MIXING_JOB_KEY = 'zhisheng-active-mix-job-v1';
+const MIXING_API_BASE = (window.MIXING_API_BASE || 'https://zhisheng-ai-298879-11-1470821727.sh.run.tcloudbase.com').replace(/\/$/, '');
+const mixingApiUrl = path => `${MIXING_API_BASE}/api/mixing${path}`;
 const mixingState = { files: {}, job: null, pollTimer: null };
 const mixingRoles = [
-  ['lead_vocal', '主人声', 'mic-vocal'],
-  ['vocal_2', '第二人声 / 和声', 'users'],
-  ['adlib', 'Adlib', 'waves'],
-  ['instrumental', '伴奏', 'music-2']
+  ['accompaniment', '伴奏（accompaniment）', 'music-2'],
+  ['vocal', '主人声（vocal）', 'mic-vocal']
 ];
 const mixingStatuses = [
   ['uploading', '上传音频'], ['planning', 'AI 分析'], ['queued', '等待工作站'],
@@ -207,7 +207,9 @@ function renderMixJob(job) {
   if (plan) plan.innerHTML = `<span>AI 混音方案 · ${job.plan?.genre || 'UNKNOWN'}</span><strong>${job.plan?.template_id || 'ZHISHENG_DEFAULT_MIX'}</strong><p>${escapeChatText(job.plan?.reason || '已生成默认专业混音方案。')}</p>`;
   const result = document.querySelector('#mixResult');
   if (result && job.status === 'completed' && job.result?.download_url) {
-    result.innerHTML = `<div class="result-badge">${icon('check-circle-2')} AI 混音完成</div><strong>${escapeChatText(job.result.display_name || 'zhisheng_mix.wav')}</strong><small>${job.result.execution_mode === 'manual_test' ? '测试执行模式：测试输出文件' : '执行模式：manual / Studio One Agent'}</small><audio controls preload="metadata" src="${job.result.download_url}"></audio><a class="btn btn-primary" href="${job.result.download_url}" download>${icon('download')} 下载 WAV</a>`;
+    const formatLabel = (job.result.format || 'wav').toUpperCase();
+    const resultUrl = job.result.download_url.startsWith('/api/mixing') ? `${MIXING_API_BASE}${job.result.download_url}` : job.result.download_url;
+    result.innerHTML = `<div class="result-badge">${icon('check-circle-2')} AI 混音完成</div><strong>${escapeChatText(job.result.display_name || `zhisheng_mix.${formatLabel.toLowerCase()}`)}</strong><small>${job.result.execution_mode === 'manual_test' ? '测试执行模式：测试输出文件' : `执行模式：${job.result.execution_mode || 'studio_one'}`}</small><audio controls preload="metadata" src="${resultUrl}"></audio><a class="btn btn-primary" href="${resultUrl}" download>${icon('download')} 下载 ${formatLabel}</a>`;
     lucide.createIcons();
     if (mixingState.pollTimer) clearInterval(mixingState.pollTimer);
   } else if (result && job.status === 'failed') {
@@ -221,7 +223,7 @@ function renderMixJob(job) {
 
 async function pollMixJob(jobId) {
   try {
-    const response = await fetch(`/api/mixing/jobs/${encodeURIComponent(jobId)}`);
+    const response = await fetch(mixingApiUrl(`/jobs/${encodeURIComponent(jobId)}`));
     if (!response.ok) throw new Error('任务状态暂时无法读取');
     const payload = await response.json();
     if (payload.job) renderMixJob(payload.job);
@@ -238,18 +240,26 @@ async function createMixJob() {
   const files = Object.values(mixingState.files);
   const error = document.querySelector('#mixFormError');
   const button = document.querySelector('#startMixing');
-  if (!files.length) { setMixError('请至少上传一个音频文件。'); return; }
+  if (files.length !== 2 || !mixingState.files.accompaniment || !mixingState.files.vocal) { setMixError('请同时上传伴奏和主人声。'); return; }
   if (button) { button.disabled = true; button.innerHTML = `${icon('loader-circle')} 正在上传并分析`; lucide.createIcons(); }
   try {
     const uploads = [];
     for (const item of files) {
       const form = new FormData(); form.append('file', item.file); form.append('role', item.role);
-      const response = await fetch('/api/mixing/uploads', { method: 'POST', body: form });
+      const response = await fetch(mixingApiUrl('/uploads'), { method: 'POST', body: form });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || '上传失败');
       uploads.push({ file_id: payload.file.file_id, role: item.role });
     }
-    const response = await fetch('/api/mixing/jobs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ uploads, genre_hint: document.querySelector('#mixGenre')?.value || 'AI 自动判断', user_prompt: document.querySelector('#mixPrompt')?.value.trim() || '' }) });
+    const response = await fetch(mixingApiUrl('/jobs'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        uploads,
+        genre_hint: document.querySelector('#mixGenre')?.value || 'AI 自动判断',
+        user_prompt: document.querySelector('#mixPrompt')?.value || '',
+      }),
+    });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || '创建任务失败');
     renderMixJob(payload.job); startMixPolling(payload.job.job_id);
@@ -272,6 +282,7 @@ function initAiMixingPage() {
 
 function mountAiMixingPage() {
   document.querySelector('#app').innerHTML = header() + aiMixingPage();
+  document.querySelector('.mix-plan-fields')?.remove();
   lucide.createIcons();
   installMixingNav();
   initAiMixingPage();
