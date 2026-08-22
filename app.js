@@ -195,6 +195,8 @@ async function selectMixFile(role, file) {
 
 function renderMixJob(job) {
   mixingState.job = job;
+  // A transient polling failure must not remain visible after a valid job response.
+  setMixError('');
   sessionStorage.setItem(MIXING_JOB_KEY, job.job_id);
   const id = document.querySelector('#mixJobId');
   if (id) id.textContent = `${job.job_id} · ${job.status}`;
@@ -209,16 +211,18 @@ function renderMixJob(job) {
   const plan = document.querySelector('#mixPlanCard');
   if (plan) plan.innerHTML = `<span>AI 混音方案 · ${job.plan?.genre || 'UNKNOWN'}</span><strong>${job.plan?.template_id || 'ZHISHENG_DEFAULT_MIX'}</strong><p>${escapeChatText(job.plan?.reason || '已生成默认专业混音方案。')}</p>`;
   const result = document.querySelector('#mixResult');
+  if ((job.status === 'completed' || job.status === 'failed') && mixingState.pollTimer) {
+    clearInterval(mixingState.pollTimer);
+    mixingState.pollTimer = null;
+  }
   if (result && job.status === 'completed' && job.result?.download_url) {
     const formatLabel = (job.result.format || 'wav').toUpperCase();
     const resultUrl = job.result.download_url.startsWith('/api/mixing') ? `${MIXING_API_BASE}${job.result.download_url}` : job.result.download_url;
     result.innerHTML = `<div class="result-badge">${icon('check-circle-2')} AI 混音完成</div><strong>${escapeChatText(job.result.display_name || `zhisheng_mix.${formatLabel.toLowerCase()}`)}</strong><small>${job.result.execution_mode === 'manual_test' ? '测试执行模式：测试输出文件' : `执行模式：${job.result.execution_mode || 'studio_one'}`}</small><audio controls preload="metadata" src="${resultUrl}"></audio><a class="btn btn-primary" href="${resultUrl}" download>${icon('download')} 下载 ${formatLabel}</a>`;
     lucide.createIcons();
-    if (mixingState.pollTimer) clearInterval(mixingState.pollTimer);
   } else if (result && job.status === 'failed') {
     result.innerHTML = `<div class="result-badge failed-badge">${icon('circle-alert')} 任务失败</div><p>${escapeChatText(job.error || job.progress?.message || 'Local Agent 执行失败')}</p>`;
     lucide.createIcons();
-    if (mixingState.pollTimer) clearInterval(mixingState.pollTimer);
   } else if (result) {
     result.innerHTML = `<span class="mix-live-dot"></span>${escapeChatText(job.progress?.message || '任务正在等待处理')}`;
   }
@@ -230,7 +234,12 @@ async function pollMixJob(jobId) {
     if (!response.ok) throw new Error('任务状态暂时无法读取');
     const payload = await response.json();
     if (payload.job) renderMixJob(payload.job);
-  } catch (error) { setMixError(error.message); }
+  } catch (error) {
+    // Do not replace a terminal success/failure state with a late network error.
+    if (!mixingState.job || !['completed', 'failed'].includes(mixingState.job.status)) {
+      setMixError(error.message);
+    }
+  }
 }
 
 function startMixPolling(jobId) {
