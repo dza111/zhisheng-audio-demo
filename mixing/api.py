@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from . import planner, store
 from .models import ALLOWED_ROLES, public_job
@@ -31,7 +32,20 @@ def _json_body(handler, maximum: int = 1024 * 1024) -> dict:
 
 
 def _agent_allowed(handler) -> bool:
+    # For the local demo, share the Agent's ignored .env as the single source
+    # of truth. CloudBase does not have this local file, so it continues to use
+    # MIX_AGENT_TOKEN from its configured environment.
     expected = os.environ.get("MIX_AGENT_TOKEN", "").strip()
+    local_env = Path(__file__).resolve().parent.parent / "local_agent" / ".env"
+    if local_env.is_file():
+        try:
+            for raw_line in local_env.read_text(encoding="utf-8-sig").splitlines():
+                line = raw_line.strip()
+                if line.startswith("MIX_AGENT_TOKEN="):
+                    expected = line.split("=", 1)[1].strip().strip('\"').strip("'")
+                    break
+        except OSError:
+            pass
     supplied = handler.headers.get("X-Mix-Agent-Token", "").strip()
     return bool(expected) and supplied == expected
 
@@ -44,7 +58,15 @@ def _send_file(handler, path: Path, content_type: str, filename: str) -> None:
     handler.send_response(200)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Length", str(path.stat().st_size))
-    handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+    # http.server headers are latin-1 encoded; RFC 5987 keeps Chinese names
+    # from raising UnicodeEncodeError and closing the download connection.
+    safe_name = Path(filename).name or "audio"
+    ascii_name = "audio" + Path(safe_name).suffix.lower()
+    encoded_name = quote(safe_name, safe="")
+    handler.send_header(
+        "Content-Disposition",
+        f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
+    )
     handler._write_cors_headers()
     handler.end_headers()
     with path.open("rb") as file:

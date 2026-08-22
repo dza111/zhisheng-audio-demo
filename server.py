@@ -8,6 +8,31 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+
+def _load_local_mix_env() -> None:
+    """Use the agent .env for local demos without overriding real deployment vars."""
+    env_path = Path(__file__).resolve().parent / "local_agent" / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        lines = env_path.read_text(encoding="utf-8-sig").splitlines()
+    except OSError:
+        return
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        # The local server and local agent must share this one source of truth.
+        # CloudBase does not receive this ignored local file, so its env remains intact.
+        if key in {"MIX_AGENT_TOKEN"} and value:
+            os.environ[key] = value
+
+
+_load_local_mix_env()
+
 from mixing.api import handle as handle_mixing_request
 
 
@@ -214,6 +239,7 @@ class SpaHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    host, port = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "4173"))
+    # Keep the local server port aligned with local_agent/.env.
+    host, port = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "4175"))
     print(f"Zhisheng Audio Demo: http://{host}:{port}")
     ThreadingHTTPServer((host, port), SpaHandler).serve_forever()
