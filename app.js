@@ -131,6 +131,23 @@ async function streamDeepSeekReply(messages, bubble) {
   return answer;
 }
 
+function installFloatingAiRobot() {
+  if (document.querySelector('.ai-robot-float')) return;
+  const robot = document.createElement('a');
+  robot.className = 'ai-robot-float';
+  robot.href = '/ai-agent';
+  robot.setAttribute('aria-label', '打开智声 AI 智能体');
+  robot.title = '打开智声 AI 智能体';
+  robot.innerHTML = '<img src="assets/zhisheng-robot.png" alt="智声 AI 声核机器人" />';
+  robot.addEventListener('click', event => {
+    event.preventDefault();
+    navigate('/ai-agent');
+  });
+  document.body.appendChild(robot);
+}
+
+installFloatingAiRobot();
+
 // -----------------------------------------------------------------------------
 // AI Mixing demo: a separate upload/job experience that does not touch /ai-agent.
 // -----------------------------------------------------------------------------
