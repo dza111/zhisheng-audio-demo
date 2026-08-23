@@ -28,7 +28,7 @@ const people = {
 };
 
 const services = [
-  ['录音服务','专业录音棚、人声与乐器录制','mic-vocal','/recording'],['混音服务','从人声到母带的细节打磨','sliders-horizontal','/mixing'],['直播调试','直播间声音和设备链路优化','radio','/live'],['编曲服务','为旋律构建完整音乐表达','music-3','/arrangement'],['设备供应','按场景匹配专业音频设备','headphones','/equipment'],['AI 智能体','用一句话开启资源匹配','sparkles','/ai-agent']
+  ['录音服务','专业录音棚、人声与乐器录制','mic-vocal','/recording'],['混音服务','从人声到母带的细节打磨','sliders-horizontal','/mixing'],['直播调试','直播间声音和设备链路优化','radio','/live'],['编曲服务','为旋律构建完整音乐表达','music-3','/arrangement'],['设备供应','按场景匹配专业音频设备','headphones','/equipment'],['效果预设','为不同曲风与场景快速建立声音方向','audio-waveform','/presets']
 ];
 const equipment = [
   ['麦克风','AT2020 XLR','1,000 - 1,600 元','翻唱、配音、新手创作','https://images.unsplash.com/photo-1590602847861-f357a9332bbc?auto=format&fit=crop&w=700&q=80'],['声卡','Rodecaster Duo','3,000 - 4,000 元','直播、播客、多人录制','https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=700&q=80'],['监听设备','Yamaha HS5','2,000 - 3,000 元','家庭工作室、混音入门','https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?auto=format&fit=crop&w=700&q=80'],['耳机','DT 770 Pro','1,000 - 1,500 元','录音监听、音乐制作','https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=700&q=80'],['音频插件','FabFilter Bundle','1,500 - 3,000 元','混音、人声处理、母带','https://images.unsplash.com/photo-1558403194-611308249627?auto=format&fit=crop&w=700&q=80']];
