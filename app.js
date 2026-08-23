@@ -134,13 +134,65 @@ async function streamDeepSeekReply(messages, bubble) {
 function installFloatingAiRobot() {
   if (document.querySelector('.ai-robot-float')) return;
   const robot = document.createElement('a');
+  const positionKey = 'zhisheng-ai-robot-position-v1';
   robot.className = 'ai-robot-float';
   robot.href = '/ai-agent';
   robot.setAttribute('aria-label', '打开智声 AI 智能体');
   robot.title = '打开智声 AI 智能体';
-  robot.innerHTML = '<img src="assets/zhisheng-robot.png" alt="智声 AI 声核机器人" />';
+  robot.innerHTML = `<img src="assets/zhisheng-robot.png" alt="智声 AI 声核机器人" draggable="false" />
+    <span class="robot-ticker" aria-hidden="true"><span class="robot-ticker-frame"><span class="robot-ticker-text">智声科技AI机器人</span><span class="robot-ticker-text robot-ticker-text-alt">我叫小智</span><span class="robot-ticker-meta">SYS_07</span></span></span>`;
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(positionKey));
+    if (Number.isFinite(saved?.left) && Number.isFinite(saved?.top)) {
+      robot.style.left = `${Math.min(Math.max(saved.left, 8), window.innerWidth - 60)}px`;
+      robot.style.top = `${Math.min(Math.max(saved.top, 8), window.innerHeight - 110)}px`;
+      robot.style.right = 'auto';
+      robot.style.bottom = 'auto';
+    }
+  } catch {}
+
+  let dragStart = null;
+  let moved = false;
+  robot.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    const rect = robot.getBoundingClientRect();
+    dragStart = { pointerX: event.clientX, pointerY: event.clientY, left: rect.left, top: rect.top };
+    moved = false;
+    robot.classList.add('is-dragging');
+    robot.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  robot.addEventListener('pointermove', event => {
+    if (!dragStart) return;
+    const deltaX = event.clientX - dragStart.pointerX;
+    const deltaY = event.clientY - dragStart.pointerY;
+    if (Math.abs(deltaX) + Math.abs(deltaY) > 6) moved = true;
+    const maxLeft = Math.max(8, window.innerWidth - robot.offsetWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - robot.offsetHeight - 8);
+    const left = Math.min(Math.max(8, dragStart.left + deltaX), maxLeft);
+    const top = Math.min(Math.max(8, dragStart.top + deltaY), maxTop);
+    robot.style.left = `${left}px`;
+    robot.style.top = `${top}px`;
+    robot.style.right = 'auto';
+    robot.style.bottom = 'auto';
+  });
+  robot.addEventListener('pointerup', event => {
+    if (!dragStart) return;
+    robot.releasePointerCapture?.(event.pointerId);
+    robot.classList.remove('is-dragging');
+    dragStart = null;
+    if (moved) {
+      const rect = robot.getBoundingClientRect();
+      localStorage.setItem(positionKey, JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) }));
+      setTimeout(() => { moved = false; }, 0);
+    }
+  });
+  robot.addEventListener('pointercancel', () => { dragStart = null; robot.classList.remove('is-dragging'); });
+  robot.addEventListener('dragstart', event => event.preventDefault());
   robot.addEventListener('click', event => {
     event.preventDefault();
+    if (moved) return;
     navigate('/ai-agent');
   });
   document.body.appendChild(robot);
