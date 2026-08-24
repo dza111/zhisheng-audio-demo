@@ -48,6 +48,27 @@ function teachingPage(course){ const courses={recording:{name:'录音课程',int
 function agentPage(){ return `<main class="shell chat-shell"><aside class="chat-side"><button class="btn btn-secondary chat-new" id="newChat">${icon('square-pen')} 新建对话</button><p class="side-label">当前对话</p><div class="thread">音频资源智能匹配</div><p class="side-note">智声 AI 将基于需求、预算和风格，为你匹配平台内的专业资源。</p></aside><section class="chat-main"><header class="chat-header"><div><strong>智声 AI 智能体</strong><span>音频行业资源匹配助手</span></div><span class="status">READY</span></header><div class="messages" id="messages"><div class="message"><div class="message-avatar">${icon('sparkles')}</div><div class="bubble">你好，我是智声 AI。告诉我你想制作什么，或描述你的预算、风格和设备需求。</div></div></div><div class="chat-input-wrap"><div class="suggestions"><button data-suggest="我需要一个适合制作说唱的混音师">找说唱混音师</button><button data-suggest="预算 3000 元，推荐直播设备">推荐直播设备</button><button data-suggest="我想做一首流行歌曲，需要什么编曲">制定制作方案</button></div><form class="chat-input" id="chatForm"><input id="chatInput" autocomplete="off" placeholder="描述你的音频需求..."/><button class="send" title="发送" type="submit">${icon('arrow-up')}</button></form></div></section></main>`; }
 function notFound(){ return `<main class="shell empty"><div class="eyebrow">404 / NOT FOUND</div><h1>这个声音还没有被收录</h1><p>返回首页，继续探索专业音频资源。</p>${link('/',`回到首页 ${icon('arrow-right')}`,'btn btn-primary')}</main>`; }
 function app(){ const path=location.pathname.replace(/\/$/,'')||'/'; let content=''; const match=path.match(/^\/(recording|mixing|arrangement|live)\/([^/]+)$/); const course=path.match(/^\/teaching\/(recording|mixing|arrangement)$/); if(match) content=detail(match[1],match[2]); else if(course) content=teachingPage(course[1]); else if(path==='/') content=home(); else if(['recording','mixing','arrangement','live'].includes(path.slice(1))) { const map={recording:['录音服务','在专业录音环境中捕捉每一个有表现力的瞬间。'],mixing:['混音服务','让作品在每一副耳机、每一台音箱里都有准确表达。'],arrangement:['编曲服务','从灵感雏形到完整制作，让旋律拥有自己的世界。'],live:['直播调试','让直播间的每一句声音都清晰、稳定、恰到好处。']}; content=listing(path.slice(1),...map[path.slice(1)]); } else if(path==='/presets') content=presetsPage(); else if(path==='/equipment') content=equipmentPage(); else if(path==='/ai-agent') content=agentPage(); else content=notFound(); document.querySelector('#app').innerHTML=header()+content+(path!=='/ai-agent'?footer():''); lucide.createIcons(); bindEvents(); window.scrollTo({top:0,behavior:'instant'}); }
+function installLuxuryBackground(){
+  if(document.querySelector('.luxury-video-layer')) return;
+  const layer = document.createElement('div');
+  layer.className = 'luxury-video-layer';
+  const video = document.createElement('video');
+  video.className = 'luxury-background-video';
+  video.autoplay = true;
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  video.setAttribute('aria-hidden','true');
+  video.innerHTML = '<source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260819_212700_3bb9329b-5c50-4257-a09b-ca85cf3654a3.mp4" type="video/mp4">';
+  layer.append(video);
+  document.body.prepend(layer);
+  document.body.classList.add('luxury-background');
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    video.pause();
+    video.removeAttribute('autoplay');
+  }
+}
 function navigate(url){ history.pushState({},'',url); app(); }
 function aiReply(query){ const q=query.toLowerCase(); if(/说唱|hip|rap|混音/.test(q)){ return { text:'根据你的风格需求，我优先匹配擅长 Hip-Hop 人声塑形与低频控制的混音师。', person:people.mixing[0], kind:'mixing' }; } if(/设备|主播|直播|声卡|麦克风/.test(q)){ return { text:'你的需求更适合一套以人声清晰度和易用性为核心的直播组合：电容麦克风 + 双通道声卡 + 封闭式监听耳机。预算 3000 元内可以优先考虑 AT2020 XLR、基础声卡和 DT 770 Pro。' }; } if(/编曲|歌曲|流行/.test(q)){ return { text:'建议先确定参考曲和情绪方向，再由编曲师完成节奏骨架、和声、音色设计和人声空间预留。沈予适合现代流行与电子质感的完整制作。', person:people.arrangement[0], kind:'arrangement' }; } return { text:'我已理解你的需求。为了匹配更准确的资源，请补充期望风格、预算范围、用途和交付时间，我会基于平台资源给出优先建议。' }; }
 function addMessage(role,content){ const box=document.querySelector('#messages'); if(!box)return; const avatar=role==='user'?'U':icon('sparkles'); box.insertAdjacentHTML('beforeend',`<div class="message ${role}">${role==='user'?'':`<div class="message-avatar">${avatar}</div>`}<div class="bubble">${content}</div></div>`); lucide.createIcons(); box.parentElement.scrollTop=box.scrollHeight; }
@@ -641,10 +662,12 @@ async function streamDeepSeekReply(messages, bubble) {
 // The legacy app() call is kept for existing routes; remount this new route after it.
 installMixingNav();
 if (location.pathname === '/ai-mixing') setTimeout(mountAiMixingPage, 0);
+installLuxuryBackground();
 
 function enhanceHome() {
   const currentPath = location.pathname.replace(/\/$/, '') || '/';
-  if (currentPath !== '/' || document.querySelector('.genre-stage')) return;
+  if (currentPath !== '/') return;
+  if (document.querySelector('.genre-stage')) return;
   const anchor = document.querySelector('.trust-row');
   if (!anchor) return;
   anchor.insertAdjacentHTML('afterend', `
