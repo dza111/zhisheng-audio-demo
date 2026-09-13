@@ -38,6 +38,17 @@ class StudioOneAutomation:
         self.title_hint = str(config.get("window_title_contains", "Studio One"))
         self.ready_timeout = int(config.get("ready_timeout_seconds", 120))
         self.export_timeout = int(config.get("export_timeout_seconds", 900))
+        self._target_song_stem = ""
+
+    @staticmethod
+    def _press_enter_on_window(hwnd: int) -> None:
+        """Confirm the export dialog used by an automated website task."""
+        WM_KEYDOWN = 0x0100
+        WM_KEYUP = 0x0101
+        VK_RETURN = 0x0D
+        user32 = ctypes.windll.user32
+        user32.PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0)
+        user32.PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0)
 
     @staticmethod
     def _windows() -> list[tuple[int, str, int, str]]:
@@ -62,6 +73,7 @@ class StudioOneAutomation:
 
     def _window(self) -> tuple[int, str, int, str] | None:
         hint = self.title_hint.lower()
+        fallback = None
         for item in self._windows():
             hwnd, title, process_id, class_name = item
             if hint not in title.lower() or not ctypes.windll.user32.IsWindowVisible(hwnd):
@@ -82,8 +94,10 @@ class StudioOneAutomation:
                     continue
             finally:
                 kernel32.CloseHandle(process_handle)
-            return item
-        return None
+            if self._target_song_stem and self._target_song_stem in title.lower():
+                return item
+            fallback = fallback or item
+        return fallback
 
     def _activate(self) -> None:
         window = self._window()
@@ -159,22 +173,24 @@ class StudioOneAutomation:
     def open_song(self, song_path: Path) -> None:
         if not song_path.is_file():
             raise StudioOneAutomationError(f"Studio One song not found: {song_path}")
+        self._target_song_stem = song_path.stem.lower()
         window = self._window()
         if window and song_path.stem.lower() in window[1].lower():
             self._activate()
             return
-        self.launch_studio_one()
         subprocess.Popen([str(self.exe), str(song_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def wait_until_ready(self) -> None:
         deadline = time.monotonic() + self.ready_timeout
         while time.monotonic() < deadline:
             window = self._window()
-            if window and "loading" not in window[1].lower() and "recovery" not in window[1].lower():
+            expected_song_loaded = not self._target_song_stem or (window and self._target_song_stem in window[1].lower())
+            if window and expected_song_loaded and "loading" not in window[1].lower() and "recovery" not in window[1].lower():
                 self._activate()
                 return
             time.sleep(1)
-        raise StudioOneAutomationError("Studio One window not ready before timeout")
+        expected = f" for Song '{self._target_song_stem}'" if self._target_song_stem else ""
+        raise StudioOneAutomationError(f"Studio One window not ready{expected} before timeout")
 
     def import_audio_to_track(self, audio_path: Path, role: str) -> None:
         if role not in {"accompaniment", "vocal"}:
@@ -182,21 +198,31 @@ class StudioOneAutomation:
         if role == "accompaniment":
             self.select_first_track()
         else:
-            self.select_next_track()
+            self.select_second_track()
         self.import_audio_to_selected_track(audio_path)
 
     def import_audio_to_selected_track(self, audio_path: Path) -> None:
         """Import into the track selected by a Studio One internal Macro."""
-        try:
-            self._activate()
-            self._send_keys(self.config.get("import_macro_hotkey", "^+%{F12}"))
-            window = self._window()
-            if not window:
-                raise StudioOneAutomationError("Studio One main window disappeared before file dialog")
-            WindowsFileDialog(int(self.config.get("file_dialog_timeout_seconds", 20)), expected_process_id=window[2]).choose(audio_path)
-            time.sleep(float(self.config.get("import_wait_seconds", 0.5)))
-        except (FileDialogError, RuntimeError) as exc:
-            raise StudioOneAutomationError(str(exc)) from exc
+        attempts = max(1, int(self.config.get("import_dialog_attempts", 3)))
+        timeout = int(self.config.get("file_dialog_timeout_seconds", 20))
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                self._activate()
+                self._send_keys(self.config.get("import_macro_hotkey", "^+%{F12}"))
+                window = self._window()
+                if not window:
+                    raise StudioOneAutomationError("Studio One main window disappeared before file dialog")
+                WindowsFileDialog(timeout, expected_process_id=window[2]).choose(audio_path)
+                # Give Studio One time to finish creating the audio event before
+                # selecting the next track and invoking the import macro again.
+                time.sleep(float(self.config.get("import_wait_seconds", 2.0)))
+                return
+            except (FileDialogError, RuntimeError) as exc:
+                last_error = exc
+                if attempt < attempts:
+                    time.sleep(float(self.config.get("import_retry_delay_seconds", 1.5)))
+        raise StudioOneAutomationError(str(last_error or "Audio import failed")) from last_error
 
     def align_event_to_start(self) -> None:
         # The verified import Macro owns Studio One's default event placement.
@@ -243,6 +269,11 @@ class StudioOneAutomation:
         self._activate()
         self._send_ctrl_shift_alt_function_key(int(self.config.get("next_track_macro_vk", 0x7A)))
 
+    def select_second_track(self) -> None:
+        """Select track 2 absolutely: reset to track 1, then move down once."""
+        self.select_first_track()
+        self.select_next_track()
+
     def run_next_track_probe(self) -> None:
         self._activate()
         self._send_ctrl_shift_alt_function_key(int(self.config.get("next_track_probe_macro_vk", 0x78)))
@@ -254,8 +285,13 @@ class StudioOneAutomation:
         self._send_keys(self.config.get("export_shortcut", "^e"))
         deadline = time.monotonic() + float(self.config.get("export_dialog_timeout_seconds", 15))
         while time.monotonic() < deadline:
-            if any(item[3] == "CCLDialogClass" and "导出混音" in item[1] for item in self._windows()):
-                self._send_vk(0x0D)
+            export_dialog = next(
+                (item for item in self._windows()
+                 if item[3] == "CCLDialogClass" and "导出混音" in item[1]),
+                None,
+            )
+            if export_dialog:
+                self._press_enter_on_window(export_dialog[0])
                 return
             time.sleep(0.25)
         raise StudioOneAutomationError("Export Mixdown dialog was not detected")

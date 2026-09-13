@@ -54,7 +54,10 @@ class StudioOneAdapterImpl:
             if role == "accompaniment":
                 self.automation.select_first_track()
             else:
-                self.automation.select_next_track()
+                # Importing the first file can move Studio One's focus away
+                # from track 1. Select track 2 from a known absolute position
+                # so accompaniment always stays above vocal.
+                self.automation.select_second_track()
             self.automation.import_audio_to_selected_track(Path(item["local_path"]))
             progress_callback("studio_processing", f"[{track_number + 2}/10] {role} import completed")
         progress_callback("studio_processing", "Aligning both audio events to 00:00:00")

@@ -14,6 +14,8 @@ class WindowsFileDialog:
     BUTTON_CLASS = "Button"
     WM_SETTEXT = 0x000C
     BM_CLICK = 0x00F5
+    WM_COMMAND = 0x0111
+    IDOK = 1
 
     def __init__(self, timeout_seconds: int = 20, expected_process_id: int | None = None):
         self.timeout_seconds = timeout_seconds
@@ -87,12 +89,21 @@ class WindowsFileDialog:
                     buttons.append(child)
         if not buttons:
             # Some localized common dialogs expose no readable Button text.
-            # Enter is the standard default action after the full path is set.
-            user32.SetForegroundWindow(dialog)
-            user32.PostMessageW(dialog, 0x0100, 0x0D, 0)
-            user32.PostMessageW(dialog, 0x0101, 0x0D, 0)
+            # Trigger the standard default action directly so it never needs
+            # to appear or steal focus from the website presentation.
+            user32.SendMessageW(dialog, self.WM_COMMAND, self.IDOK, 0)
             return
         user32.SendMessageW(buttons[0], self.BM_CLICK, 0, 0)
+
+    def wait_until_closed(self, dialog: int, timeout_seconds: float = 15) -> None:
+        """Wait until Studio One has accepted the selected file."""
+        user32 = ctypes.windll.user32
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if not user32.IsWindow(dialog) or not user32.IsWindowVisible(dialog):
+                return
+            time.sleep(0.15)
+        raise FileDialogError("Windows file dialog did not close after confirming the audio file")
 
     def choose(self, path: Path, expected_process_id: int | None = None) -> None:
         if expected_process_id is not None:
@@ -100,3 +111,4 @@ class WindowsFileDialog:
         dialog = self.wait_for_file_dialog()
         self.set_file_path(dialog, path)
         self.confirm_file_dialog(dialog)
+        self.wait_until_closed(dialog)
