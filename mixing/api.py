@@ -134,6 +134,11 @@ def _agent_update(handler, job_id: str, action: str) -> None:
     agent_id = _agent_id(handler)
     try:
         if action == "heartbeat":
+            # The local agent sends an empty JSON object with every heartbeat.
+            # Consume that request body before responding; otherwise HTTP/1.1
+            # can interpret the remaining "{}" bytes as the prefix of the next
+            # upload request ("{}POST"), which prevents the MP3 result upload.
+            _json_body(handler)
             job = store.heartbeat(job_id, agent_id)
         elif action == "progress":
             payload = _json_body(handler)
