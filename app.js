@@ -103,6 +103,50 @@ function escapeChatText(value) {
   return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 }
 
+async function fetchSiteResources(query) {
+  try {
+    const response = await fetch(`${API_CONFIG.resourcesEndpoint}?q=${encodeURIComponent(query)}`);
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload.resources) ? payload.resources : [];
+  } catch { return []; }
+}
+
+function renderChatText(bubble, text) {
+  bubble.textContent = '';
+  const parts = String(text || '').split(/(https?:\/\/[^\s<>]+)/g);
+  parts.forEach(part => {
+    if (/^https?:\/\//.test(part)) {
+      const anchor = document.createElement('a');
+      anchor.href = part.replace(/[.,，。；;!?！？]+$/, '');
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.textContent = anchor.href;
+      bubble.appendChild(anchor);
+    } else {
+      bubble.appendChild(document.createTextNode(part));
+    }
+  });
+}
+
+function renderResourceCards(bubble, resources) {
+  if (!bubble || !Array.isArray(resources) || !resources.length) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-resources';
+  wrap.innerHTML = `<div class="chat-resources-label">智声科技站内资源</div>${resources.map(item => `
+    <a class="chat-resource-card" href="${escapeChatText(item.url)}">
+      ${item.image ? `<img src="${escapeChatText(item.image)}" alt="${escapeChatText(item.title)}" loading="lazy" />` : ''}
+      <span><strong>${escapeChatText(item.title)}</strong><small>${escapeChatText(item.subtitle)}</small><em>${escapeChatText(item.description)}</em></span>
+      ${icon('arrow-up-right')}
+    </a>`).join('')}`;
+  wrap.querySelectorAll('.chat-resource-card').forEach(anchor => anchor.addEventListener('click', event => {
+    event.preventDefault();
+    navigate(anchor.getAttribute('href'));
+  }));
+  bubble.appendChild(wrap);
+  lucide.createIcons();
+}
+
 function appendStreamMessage(role, text = '') {
   const box = document.querySelector('#messages');
   if (!box) return null;
@@ -476,7 +520,13 @@ function renderChatMessages() {
     lucide.createIcons();
     return;
   }
-  chatHistory.forEach(item => appendStreamMessage(item.role === 'user' ? 'user' : 'assistant', item.content));
+  chatHistory.forEach(item => {
+    const bubble = appendStreamMessage(item.role === 'user' ? 'user' : 'assistant', item.content);
+    if (item.role === 'assistant') {
+      renderChatText(bubble, item.content);
+      renderResourceCards(bubble, item.resources);
+    }
+  });
 }
 
 function renderChatSessions() {
@@ -562,10 +612,14 @@ function bindEvents() {
     chatHistory.push({ role: 'user', content: query });
     saveCurrentChat();
     const bubble = appendStreamMessage('assistant');
+    const resourcesPromise = fetchSiteResources(query);
     try {
       const answer = await streamDeepSeekReply(chatHistory, bubble);
-      chatHistory.push({ role: 'assistant', content: answer || '抱歉，我暂时没有生成内容。' });
-      if (!answer) bubble.textContent = '抱歉，我暂时没有生成内容。';
+      const finalAnswer = answer || '抱歉，我暂时没有生成内容。';
+      const resources = await resourcesPromise;
+      renderChatText(bubble, finalAnswer);
+      renderResourceCards(bubble, resources);
+      chatHistory.push({ role: 'assistant', content: finalAnswer, resources });
       saveCurrentChat();
     } catch (error) {
       bubble.textContent = `连接 AI 失败：${error.message}`;
@@ -781,10 +835,14 @@ function bindEvents() {
     chatHistory.push({ role: 'user', content: query });
     saveCurrentChat();
     const bubble = appendStreamMessage('assistant');
+    const resourcesPromise = fetchSiteResources(query);
     try {
       const answer = await streamDeepSeekReply(chatHistory, bubble);
-      chatHistory.push({ role: 'assistant', content: answer || '抱歉，我暂时没有生成内容。' });
-      if (!answer) bubble.textContent = '抱歉，我暂时没有生成内容。';
+      const finalAnswer = answer || '抱歉，我暂时没有生成内容。';
+      const resources = await resourcesPromise;
+      renderChatText(bubble, finalAnswer);
+      renderResourceCards(bubble, resources);
+      chatHistory.push({ role: 'assistant', content: finalAnswer, resources });
       saveCurrentChat();
     } catch (error) {
       bubble.textContent = `连接 AI 失败：${error.message}`;

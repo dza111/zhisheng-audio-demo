@@ -17,6 +17,19 @@
 .teaching-video-info p { color:var(--muted); }
 .teaching-video-error { color:#ff9da8!important; }
 @media(max-width:680px) { .teaching-videos,.teaching-overview { grid-template-columns:1fr; gap:18px; } }
+
+.bubble > a { color:var(--cyan); text-decoration:underline; text-underline-offset:3px; overflow-wrap:anywhere; }
+.chat-resources { display:grid; gap:10px; margin-top:18px; padding-top:14px; border-top:1px solid rgba(99,224,235,.2); }
+.chat-resources-label { color:var(--cyan); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+.chat-resource-card { display:grid; grid-template-columns:70px minmax(0,1fr) 20px; gap:12px; align-items:center; padding:10px; color:var(--text); text-decoration:none; background:rgba(10,16,28,.72); border:1px solid rgba(99,224,235,.2); transition:border-color .2s ease,transform .2s ease,background .2s ease; }
+.chat-resource-card:hover { transform:translateY(-2px); border-color:var(--cyan); background:rgba(14,27,42,.92); }
+.chat-resource-card img { width:70px; height:58px; object-fit:cover; background:#080b12; }
+.chat-resource-card span { display:grid; min-width:0; gap:3px; }
+.chat-resource-card strong { font-size:14px; }
+.chat-resource-card small { color:var(--cyan); font-size:12px; }
+.chat-resource-card em { overflow:hidden; color:var(--muted); font-size:12px; font-style:normal; line-height:1.45; text-overflow:ellipsis; white-space:nowrap; }
+.chat-resource-card > svg { width:17px; color:var(--cyan); }
+@media(max-width:680px) { .chat-resource-card { grid-template-columns:56px minmax(0,1fr) 18px; } .chat-resource-card img { width:56px; height:52px; } }
 html { min-width:320px; background:var(--bg); }
 body { margin:0; color:var(--text); background:var(--bg); font-family:"Noto Sans SC",system-ui,sans-serif; }
 button,input { font:inherit; }
