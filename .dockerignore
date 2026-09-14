@@ -1,0 +1,19 @@
+.git
+.finesse
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.log
+.env
+
+# Runtime data and the Windows Studio One worker stay on the local machine.
+data/
+data-test/
+local_agent/
+
+# Project planning and local preview artifacts are not needed by the web service.
+docs/
+preview-home.png
+CHANGELOG.md
+UPGRADE_PLAN.md
+VERSION
