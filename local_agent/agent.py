@@ -154,7 +154,15 @@ def main() -> None:
         print("修正 config.json 后重新启动 Agent。")
         return
     while True:
-        status, raw = client.request("GET", "/api/mixing/agent/jobs/next")
+        try:
+            status, raw = client.request("GET", "/api/mixing/agent/jobs/next")
+        except (urllib.error.URLError, OSError, TimeoutError) as exc:
+            # A CloudBase edge connection can occasionally reset while the
+            # local worker is idle.  Keep the Studio One worker alive and
+            # retry instead of allowing a temporary network error to stop it.
+            print(f"混音工作站连接暂时中断，稍后自动重连：{exc}", flush=True)
+            time.sleep(max(5, int(config.get("poll_seconds", 5))))
+            continue
         if status == 200 and raw:
             payload = json.loads(raw.decode("utf-8"))
             if payload.get("job"):

@@ -2,6 +2,7 @@
 data/
 data-test/
 local_agent/config.json
+local_agent/agent-runtime*.log
 __pycache__/
 *.py[cod]
 .DS_Store
